@@ -1,5 +1,7 @@
 import os
 import json
+import socket
+import sys
 from datetime import datetime
 from collections import defaultdict
 from threading import Thread
@@ -13,6 +15,17 @@ from PIL import Image
 
 CONFIG_FILE = "config.json"
 CLEAN_INTERVAL_MS = 24 * 60 * 60 * 1000  # 24 hours in milliseconds
+SINGLETON_PORT = 9999
+
+
+def check_single_instance(port=SINGLETON_PORT):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(('127.0.0.1', port))
+    except socket.error:
+        messagebox.showerror("Already running", "Another instance of Eye PDF Watcher is already running.")
+        sys.exit(0)
+    return sock
 
 
 def load_config():
@@ -115,7 +128,7 @@ class App:
 
         self.observer = None
 
-        # Auto-clean schedule
+        # Start auto-clean after watcher starts
         if self.auto_start.get() and all([self.input_dir.get(), self.output_dir.get()]):
             self.start_watching()
 
@@ -152,7 +165,7 @@ class App:
         self.observer = Observer()
         self.observer.schedule(handler, self.input_dir.get(), recursive=False)
         Thread(target=self.observer.start, daemon=True).start()
-        # initial auto-clean
+        # initial auto-clean and schedule recurring
         self.master.after(0, self.auto_clean)
         self.status.config(text="Watching…", fg="green")
 
@@ -195,6 +208,8 @@ class App:
         self.master.after(CLEAN_INTERVAL_MS, self.auto_clean)
 
 if __name__ == "__main__":
+    # enforce single instance
+    singleton_socket = check_single_instance()
     root = tk.Tk()
     App(root)
     root.mainloop()
