@@ -31,8 +31,7 @@ def check_single_instance(port=SINGLETON_PORT):
 def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "r") as f:
-            cfg = json.load(f)
-            return cfg
+            return json.load(f)
     return {"input_dir": "", "output_dir": "", "auto_start": True}
 
 
@@ -68,6 +67,12 @@ class EyeHandler(FileSystemEventHandler):
         if event.is_directory or not event.src_path.lower().endswith((".jpg", ".jpeg", ".png")):
             return
         self._process_file(event.src_path)
+
+    def on_moved(self, event):
+        # Also handle moves/renames into watched folder
+        dest = getattr(event, 'dest_path', None)
+        if dest and not event.is_directory and dest.lower().endswith((".jpg", ".jpeg", ".png")):
+            self._process_file(dest)
 
     def _process_file(self, path):
         fn = os.path.basename(path)
@@ -128,7 +133,6 @@ class App:
 
         self.observer = None
 
-        # Start auto-clean after watcher starts
         if self.auto_start.get() and all([self.input_dir.get(), self.output_dir.get()]):
             self.start_watching()
 
@@ -165,7 +169,6 @@ class App:
         self.observer = Observer()
         self.observer.schedule(handler, self.input_dir.get(), recursive=False)
         Thread(target=self.observer.start, daemon=True).start()
-        # initial auto-clean and schedule recurring
         self.master.after(0, self.auto_clean)
         self.status.config(text="Watching…", fg="green")
 
@@ -208,7 +211,6 @@ class App:
         self.master.after(CLEAN_INTERVAL_MS, self.auto_clean)
 
 if __name__ == "__main__":
-    # enforce single instance
     singleton_socket = check_single_instance()
     root = tk.Tk()
     App(root)
